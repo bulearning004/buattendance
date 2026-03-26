@@ -100,7 +100,7 @@ export default function LandingPage() {
       </div>
 
       <p className="text-slate-400 text-sm">
-        รองรับเฉพาะบัญชี @bumail.net เท่านั้น
+        รองรับเฉพาะบัญชี @bumail.net หรือ @bu.ac.th เท่านั้น
       </p>
     </div>
   );

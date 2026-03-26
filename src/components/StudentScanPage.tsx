@@ -276,7 +276,7 @@ export default function StudentScanPage() {
         localStorage.setItem('pending_attendance_loc', JSON.stringify(userLocation));
       }
 
-      const user = await signInWithGoogle('@bumail.net');
+      const user = await signInWithGoogle(['@bumail.net', '@bu.ac.th']);
       
       // If user is returned (popup mode), proceed immediately
       if (user && activeSession && userLocation) {
@@ -300,7 +300,7 @@ export default function StudentScanPage() {
           setUserLocation(loc);
           
           // Check for redirect result
-          const user = await handleRedirectResult('@bumail.net');
+          const user = await handleRedirectResult(['@bumail.net', '@bu.ac.th']);
           if (user || auth.currentUser) {
             setStep('verifying');
             // We need to re-verify the code to get the session data

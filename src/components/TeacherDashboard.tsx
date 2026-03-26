@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
-import PinModal from './PinModal';
 import ExcelUpload from './ExcelUpload';
 import { Student, Subject } from '../types';
 import { 
@@ -48,9 +47,14 @@ import {
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
-  const [isPinVerified, setIsPinVerified] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [isAddSubjectOpen, setIsAddSubjectOpen] = useState(false);
+  const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
+  const [newStudentData, setNewStudentData] = useState({
+    name: '',
+    studentId: '',
+    email: ''
+  });
   
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -140,6 +144,34 @@ export default function TeacherDashboard() {
     }
   };
 
+  const handleAddStudent = async () => {
+    if (!selectedSubject) return;
+    if (!newStudentData.name || !newStudentData.studentId) {
+      toast.error('กรุณากรอกชื่อและรหัสนักศึกษา');
+      return;
+    }
+
+    try {
+      const studentData: Student = {
+        ...newStudentData,
+        email: newStudentData.email || `${newStudentData.studentId}@bumail.net`,
+        subjectId: selectedSubject.id
+      };
+
+      await setDoc(doc(db, 'students', studentData.studentId + '_' + selectedSubject.id), studentData);
+      
+      const newCount = selectedSubject.studentCount + 1;
+      await updateDoc(doc(db, 'subjects', selectedSubject.id), {
+        studentCount: newCount
+      });
+      
+      setIsAddStudentOpen(false);
+      setNewStudentData({ name: '', studentId: '', email: '' });
+      toast.success('เพิ่มนักศึกษาสำเร็จ');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'students');
+    }
+  };
   const removeStudent = async (studentId: string) => {
     if (!selectedSubject) return;
     
@@ -162,19 +194,12 @@ export default function TeacherDashboard() {
     <div className="flex-1 p-8 space-y-8 overflow-y-auto bg-background min-h-screen">
       <Toaster position="top-right" />
       
-      <PinModal 
-        isOpen={!isPinVerified} 
-        onSuccess={() => setIsPinVerified(true)} 
-        correctPin="1234" 
-      />
-
       <AnimatePresence>
-        {isPinVerified && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-8"
-          >
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-8"
+        >
             {/* Header */}
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div className="space-y-1">
@@ -219,7 +244,10 @@ export default function TeacherDashboard() {
                       <Key size={18} />
                       <span>เริ่มเช็คชื่อ (รหัส 6 หลัก)</span>
                     </button>
-                    <button className="bg-brand-purple text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-purple/20 hover:scale-[1.02] transition-all flex items-center space-x-2">
+                    <button 
+                      onClick={() => setIsAddStudentOpen(true)}
+                      className="bg-brand-purple text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-purple/20 hover:scale-[1.02] transition-all flex items-center space-x-2"
+                    >
                       <UserPlus size={18} />
                       <span>Add Student</span>
                     </button>
@@ -485,7 +513,6 @@ export default function TeacherDashboard() {
               </div>
             )}
           </motion.div>
-        )}
       </AnimatePresence>
 
       {/* Add Subject Modal */}
@@ -595,6 +622,92 @@ export default function TeacherDashboard() {
                   className="bg-brand-purple text-white px-10 py-4 rounded-2xl font-bold shadow-xl shadow-brand-purple/20 hover:scale-[1.02] active:scale-95 transition-all"
                 >
                   Submit
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Add Student Modal */}
+      <AnimatePresence>
+        {isAddStudentOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAddStudentOpen(false)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden"
+            >
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-brand-purple rounded-xl flex items-center justify-center text-white">
+                    <UserPlus size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-900">เพิ่มนักศึกษา</h3>
+                    <p className="text-xs text-slate-500 font-medium">Add a student manually to this subject.</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsAddStudentOpen(false)}
+                  className="p-2 hover:bg-slate-200 rounded-full transition-colors"
+                >
+                  <X size={20} className="text-slate-400" />
+                </button>
+              </div>
+
+              <div className="p-8 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">ชื่อ-นามสกุล</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. สมชาย ใจดี"
+                    value={newStudentData.name}
+                    onChange={(e) => setNewStudentData(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-brand-purple/5 outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">รหัสนักศึกษา</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. 1650700000"
+                    value={newStudentData.studentId}
+                    onChange={(e) => setNewStudentData(prev => ({ ...prev, studentId: e.target.value }))}
+                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-brand-purple/5 outline-none transition-all font-mono"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">อีเมล (ถ้ามี)</label>
+                  <input 
+                    type="email" 
+                    placeholder="e.g. student@bumail.net"
+                    value={newStudentData.email}
+                    onChange={(e) => setNewStudentData(prev => ({ ...prev, email: e.target.value }))}
+                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-brand-purple/5 outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="p-8 bg-slate-50/50 border-t border-slate-100 flex items-center justify-end space-x-4">
+                <button 
+                  onClick={() => setIsAddStudentOpen(false)}
+                  className="px-8 py-4 text-slate-500 font-bold hover:text-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleAddStudent}
+                  className="bg-brand-purple text-white px-10 py-4 rounded-2xl font-bold shadow-xl shadow-brand-purple/20 hover:scale-[1.02] active:scale-95 transition-all"
+                >
+                  Add Student
                 </button>
               </div>
             </motion.div>

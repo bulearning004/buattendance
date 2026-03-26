@@ -13,7 +13,7 @@ googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
-export const signInWithGoogle = async (allowedDomain?: string) => {
+export const signInWithGoogle = async (allowedDomains?: string | string[]) => {
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   
   try {
@@ -30,9 +30,13 @@ export const signInWithGoogle = async (allowedDomain?: string) => {
     const testEmail = 'bulearning004@gmail.com';
     
     if (user.email !== testEmail) {
-      if (allowedDomain && !user.email?.endsWith(allowedDomain)) {
-        await signOut(auth);
-        throw new Error(`กรุณาใช้บัญชี ${allowedDomain} ในการเข้าสู่ระบบส่วนนี้`);
+      if (allowedDomains) {
+        const domains = Array.isArray(allowedDomains) ? allowedDomains : [allowedDomains];
+        const isAllowed = domains.some(domain => user.email?.endsWith(domain));
+        if (!isAllowed) {
+          await signOut(auth);
+          throw new Error(`กรุณาใช้บัญชี ${domains.join(' หรือ ')} ในการเข้าสู่ระบบส่วนนี้`);
+        }
       }
     }
     
@@ -43,16 +47,20 @@ export const signInWithGoogle = async (allowedDomain?: string) => {
   }
 };
 
-export const handleRedirectResult = async (allowedDomain?: string) => {
+export const handleRedirectResult = async (allowedDomains?: string | string[]) => {
   try {
     const result = await getRedirectResult(auth);
     if (result) {
       const user = result.user;
       const testEmail = 'bulearning004@gmail.com';
       if (user.email !== testEmail) {
-        if (allowedDomain && !user.email?.endsWith(allowedDomain)) {
-          await signOut(auth);
-          throw new Error(`กรุณาใช้บัญชี ${allowedDomain} ในการเข้าสู่ระบบส่วนนี้`);
+        if (allowedDomains) {
+          const domains = Array.isArray(allowedDomains) ? allowedDomains : [allowedDomains];
+          const isAllowed = domains.some(domain => user.email?.endsWith(domain));
+          if (!isAllowed) {
+            await signOut(auth);
+            throw new Error(`กรุณาใช้บัญชี ${domains.join(' หรือ ')} ในการเข้าสู่ระบบส่วนนี้`);
+          }
         }
       }
       return user;

@@ -22,8 +22,6 @@ const menuItems = [
   { icon: Activity, label: 'เซสชันปัจจุบัน', path: '/attendance/session' },
   { icon: PieChart, label: 'รายงานการเข้าเรียน', path: '/teacher/reports' },
   { icon: Key, label: 'เช็คชื่อเข้าเรียน', path: '/student/scan' },
-  { icon: BookOpen, label: 'รายวิชา', path: '/subjects' },
-  { icon: Users, label: 'เซคชัน', path: '/sections' },
   { icon: Calendar, label: 'ประวัติการเช็คชื่อ', path: '/attendance' },
   { icon: Settings, label: 'ตั้งค่า', path: '/settings' },
 ];
