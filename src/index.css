@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-purple: #9A85F2;
+  --color-brand-peach: #FFB08E;
+  --color-brand-blue: #8ECAFF;
+  --color-surface-white: #FFFFFF;
+  --color-background: #F8F9FC;
+  
+  --radius-3xl: 24px;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-slate-900 font-sans;
+  }
+}
+
+.glass {
+  @apply bg-white/30 backdrop-blur-md border border-white/20;
+}
+
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+}
+
+.card-hover {
+  @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
+}

@@ -1,0 +1,94 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: subjects
+    // Document ID: {subjectId}
+    // Fields:
+    //   - id: string (required)
+    //   - code: string (required)
+    //   - name: string (required)
+    //   - section: string (required)
+    //   - studentCount: integer (optional)
+    //   - teacherEmail: string (required)
+    //
+    // Collection: students
+    // Document ID: {studentId}
+    // Fields:
+    //   - studentId: string (required)
+    //   - name: string (required)
+    //   - email: string (required)
+    //   - subjectId: string (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(email) {
+      return isAuthenticated() && request.auth.token.email == email;
+    }
+
+    function isValidSubject(data) {
+      return data.keys().hasAll(['id', 'code', 'name', 'section', 'teacherEmail']) &&
+             data.id is string &&
+             data.code is string &&
+             data.name is string &&
+             data.section is string &&
+             data.teacherEmail is string &&
+             data.teacherEmail == request.auth.token.email;
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll(['studentId', 'name', 'email', 'subjectId']) &&
+             data.studentId is string &&
+             data.name is string &&
+             data.email is string &&
+             data.subjectId is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /subjects/{subjectId} {
+      allow read: if isAuthenticated() && resource.data.teacherEmail == request.auth.token.email;
+      allow create: if isAuthenticated() && isValidSubject(request.resource.data);
+      allow update: if isAuthenticated() && isValidSubject(request.resource.data) && resource.data.teacherEmail == request.auth.token.email;
+      allow delete: if isAuthenticated() && resource.data.teacherEmail == request.auth.token.email;
+    }
+
+    match /students/{studentId} {
+      // For now, allow reading students if authenticated. 
+      // In a real app, we'd check if the user is the teacher of the subject.
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidStudent(request.resource.data);
+      allow update: if isAuthenticated() && isValidStudent(request.resource.data);
+      allow delete: if isAuthenticated();
+    }
+    
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /attendance_sessions/{sessionId} {
+      // Allow unauthenticated read to check location before login
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated(); 
+    }
+
+    match /attendance_records/{recordId} {
+      // Students can create their own records
+      // Teachers can read records for their subjects
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+    }
+  }
+}

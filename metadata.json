@@ -1,0 +1,5 @@
+{
+  "name": "BU Attendance System",
+  "description": "A premium attendance tracking system for BU students and teachers with a modern bento grid layout.",
+  "requestFramePermissions": ["geolocation", "camera"]
+}

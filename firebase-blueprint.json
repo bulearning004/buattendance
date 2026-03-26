@@ -1,0 +1,79 @@
+{
+  "entities": {
+    "Subject": {
+      "title": "Subject",
+      "description": "A course or subject taught by a teacher.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "section": { "type": "string" },
+        "studentCount": { "type": "integer" },
+        "teacherEmail": { "type": "string" }
+      },
+      "required": ["id", "code", "name", "section", "teacherEmail"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "A student enrolled in a subject.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "subjectId": { "type": "string" }
+      },
+      "required": ["studentId", "name", "email", "subjectId"]
+    },
+    "AttendanceSession": {
+      "title": "AttendanceSession",
+      "description": "An active attendance session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "shortCode": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "isActive": { "type": "boolean" },
+        "qrCode": { "type": "string" },
+        "location": { "type": "object" },
+        "radius": { "type": "number" }
+      },
+      "required": ["id", "subjectId", "shortCode", "date", "isActive"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "A record of a student's attendance.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "studentUid": { "type": "string" },
+        "studentName": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string" },
+        "location": { "type": "object" }
+      },
+      "required": ["sessionId", "subjectId", "studentUid", "studentName", "timestamp", "status"]
+    }
+  },
+  "firestore": {
+    "/subjects/{subjectId}": {
+      "schema": "Subject",
+      "description": "Collection of subjects."
+    },
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Collection of students."
+    },
+    "/attendance_sessions/{sessionId}": {
+      "schema": "AttendanceSession",
+      "description": "Collection of active attendance sessions."
+    },
+    "/attendance_records/{recordId}": {
+      "schema": "AttendanceRecord",
+      "description": "Collection of attendance records."
+    }
+  }
+}
