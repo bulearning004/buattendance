@@ -36,9 +36,35 @@ export default function StudentScanPage() {
   const [manualCode, setManualCode] = useState('');
   const [isError, setIsError] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [lastLocationUpdate, setLastLocationUpdate] = useState<number>(0);
   const [activeSession, setActiveSession] = useState<any>(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  // Real-time location tracking to keep GPS active and fresh
+  useEffect(() => {
+    if (!("geolocation" in navigator)) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        });
+        setLastLocationUpdate(Date.now());
+      },
+      (error) => {
+        console.error("WatchPosition error:", error);
+      },
+      { 
+        enableHighAccuracy: true, 
+        timeout: 10000, 
+        maximumAge: 0 
+      }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
 
   // Helper to get location with high accuracy
   const getPreciseLocation = (): Promise<{ lat: number; lng: number }> => {
@@ -95,9 +121,15 @@ export default function StudentScanPage() {
   const handleVerifyBySessionId = async (sessionId: string) => {
     setStep('verifying');
     try {
-      // Get location first with high accuracy
-      const loc = await getPreciseLocation();
-      setUserLocation(loc);
+      // Use tracked location if fresh (within 5s), otherwise get fresh one
+      let loc = userLocation;
+      const isFresh = Date.now() - lastLocationUpdate < 5000;
+      
+      if (!loc || !isFresh) {
+        loc = await getPreciseLocation();
+        setUserLocation(loc);
+        setLastLocationUpdate(Date.now());
+      }
 
       const sessionDoc = await getDoc(doc(db, 'attendance_sessions', sessionId));
       if (!sessionDoc.exists()) throw new Error("ไม่พบข้อมูลการเช็คชื่อนี้ (Session not found)");
@@ -143,9 +175,16 @@ export default function StudentScanPage() {
     setIsError(null);
 
     try {
-      // Always get fresh precise location
-      const loc = await getPreciseLocation();
-      setUserLocation(loc);
+      // Use tracked location if fresh (within 5s), otherwise get fresh one
+      let loc = userLocation;
+      const isFresh = Date.now() - lastLocationUpdate < 5000;
+      
+      if (!loc || !isFresh) {
+        loc = await getPreciseLocation();
+        setUserLocation(loc);
+        setLastLocationUpdate(Date.now());
+      }
+      
       await verifyWithLocation(manualCode, loc);
     } catch (error: any) {
       console.error("Verification error:", error);
@@ -393,13 +432,29 @@ export default function StudentScanPage() {
             <div className="space-y-2">
               <h2 className="text-2xl font-bold text-red-500">ไม่สามารถเช็คชื่อได้</h2>
               <p className="text-slate-400">{isError}</p>
+              {activeSession && userLocation && (
+                <p className="text-brand-purple font-bold text-sm animate-pulse">
+                  ระยะห่างปัจจุบัน: {Math.round(getDistance(userLocation.lat, userLocation.lng, activeSession.location.lat, activeSession.location.lng))}ม.
+                </p>
+              )}
             </div>
-            <button 
-              onClick={() => setStep('enter_code')}
-              className="w-full bg-white/10 text-white py-4 rounded-2xl font-bold"
-            >
-              ลองใหม่อีกครั้ง
-            </button>
+            <div className="space-y-3">
+              <button 
+                onClick={() => handleVerifyCode()}
+                className="w-full bg-brand-purple text-white py-4 rounded-2xl font-bold shadow-lg shadow-brand-purple/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              >
+                ตรวจสอบพิกัดอีกครั้ง
+              </button>
+              <button 
+                onClick={() => {
+                  setStep('enter_code');
+                  setIsError(null);
+                }}
+                className="w-full bg-white/10 text-white py-4 rounded-2xl font-bold"
+              >
+                แก้ไขรหัส
+              </button>
+            </div>
           </motion.div>
         )}
       </div>
