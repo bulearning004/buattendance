@@ -11,4 +11,6 @@ export interface Subject {
   name: string;
   section: string;
   studentCount: number;
+  totalClasses?: number;
+  totalScore?: number;
 }

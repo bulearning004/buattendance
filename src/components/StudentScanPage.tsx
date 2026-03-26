@@ -11,7 +11,7 @@ import {
   where,
   getDocs
 } from 'firebase/firestore';
-import { db, auth, signInWithGoogle, handleRedirectResult, waitForAuth } from '../lib/firebase';
+import { db, auth, signInWithGoogle, handleRedirectResult, waitForAuth, signOut } from '../lib/firebase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast, Toaster } from 'sonner';
 
@@ -302,6 +302,25 @@ export default function StudentScanPage() {
       if (!user) throw new Error("กรุณาล็อกอินก่อนเช็คชื่อ");
       if (!user.email) throw new Error("ไม่พบข้อมูลอีเมลของคุณ");
 
+      // Check if already checked in today for this subject
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const existingRecordQuery = query(
+        collection(db, 'attendance_records'),
+        where('subjectId', '==', subjectId),
+        where('studentUid', '==', user.uid),
+        where('timestamp', '>=', Timestamp.fromDate(startOfDay)),
+        where('timestamp', '<=', Timestamp.fromDate(endOfDay))
+      );
+
+      const existingSnap = await getDocs(existingRecordQuery);
+      if (!existingSnap.empty) {
+        throw new Error("คุณได้เช็คชื่อในวิชานี้สำหรับวันนี้ไปแล้ว");
+      }
+
       setVerifyingStatus("กำลังตรวจสอบรายชื่อนักศึกษา...");
 
       // 1. Check if student is enrolled in this subject
@@ -429,6 +448,16 @@ export default function StudentScanPage() {
     checkRedirect();
   }, []);
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      navigate('/');
+    } catch (error) {
+      console.error("Error signing out:", error);
+      navigate('/');
+    }
+  };
+
   if (step === 'success') {
     return (
       <motion.div 
@@ -442,10 +471,10 @@ export default function StudentScanPage() {
         <h1 className="text-5xl font-bold mb-4">เช็คชื่อสำเร็จ</h1>
         <p className="text-xl opacity-90 mb-12">บันทึกข้อมูลการเข้าเรียนของคุณเรียบร้อยแล้ว</p>
         <button 
-          onClick={() => navigate('/')}
+          onClick={handleLogout}
           className="bg-white text-emerald-600 px-12 py-4 rounded-3xl font-bold text-lg shadow-xl hover:bg-emerald-50 transition-all"
         >
-          กลับหน้าหลัก
+          ออกจากระบบ
         </button>
       </motion.div>
     );

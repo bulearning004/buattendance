@@ -10,7 +10,9 @@
         "name": { "type": "string" },
         "section": { "type": "string" },
         "studentCount": { "type": "integer" },
-        "teacherEmail": { "type": "string" }
+        "teacherEmail": { "type": "string" },
+        "totalClasses": { "type": "integer" },
+        "totalScore": { "type": "integer" }
       },
       "required": ["id", "code", "name", "section", "teacherEmail"]
     },
@@ -51,6 +53,7 @@
         "subjectId": { "type": "string" },
         "studentUid": { "type": "string" },
         "studentName": { "type": "string" },
+        "studentEmail": { "type": "string" },
         "timestamp": { "type": "string", "format": "date-time" },
         "status": { "type": "string" },
         "location": { "type": "object" }

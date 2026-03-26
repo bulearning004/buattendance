@@ -23,7 +23,8 @@ import {
   where, 
   orderBy,
   Timestamp,
-  getDoc
+  getDoc,
+  updateDoc
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { Toaster, toast } from 'sonner';
@@ -121,6 +122,20 @@ export default function AttendanceSessionPage() {
     return () => unsubscribe();
   }, [sessionId]);
 
+  const endSession = async () => {
+    try {
+      await updateDoc(doc(db, 'attendance_sessions', sessionId), {
+        isActive: false
+      });
+      toast.success("Session ended successfully");
+      navigate('/teacher/dashboard');
+    } catch (error) {
+      console.error("Error ending session:", error);
+      toast.error("Failed to end session properly");
+      navigate('/teacher/dashboard');
+    }
+  };
+
   return (
     <div className="flex-1 p-8 space-y-8 overflow-y-auto bg-background min-h-screen">
       <Toaster position="top-right" />
@@ -149,7 +164,7 @@ export default function AttendanceSessionPage() {
         </div>
         <div className="flex items-center space-x-3">
           <button 
-            onClick={() => navigate('/teacher/dashboard')}
+            onClick={endSession}
             className="bg-white text-red-500 px-6 py-3 rounded-2xl font-bold border border-red-100 shadow-sm hover:bg-red-50 transition-all"
           >
             End Session
