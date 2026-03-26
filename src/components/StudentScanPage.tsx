@@ -40,6 +40,8 @@ export default function StudentScanPage() {
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
   const [lastLocationUpdate, setLastLocationUpdate] = useState<number>(0);
   const [activeSession, setActiveSession] = useState<any>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const hasCheckedRedirect = useRef(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -198,7 +200,7 @@ export default function StudentScanPage() {
     }
   };
 
-  const verifyDistanceAndAuth = async (sessionId: string, sessionData: any, loc: { lat: number; lng: number }) => {
+  const verifyDistanceAndAuth = async (sessionId: string, sessionData: any, loc: { lat: number; lng: number }, userOverride?: any) => {
     const teacherLoc = sessionData.location;
     const allowedRadius = sessionData.radius || 100;
     const distance = getDistance(
@@ -210,10 +212,12 @@ export default function StudentScanPage() {
       throw new Error(`คุณไม่ได้อยู่ในห้องเรียน (ระยะห่าง ${Math.round(distance)}ม.)`);
     }
 
-    if (!auth.currentUser) {
+    const currentUser = userOverride || auth.currentUser;
+
+    if (!currentUser) {
       setStep('login_required');
     } else {
-      await markAttendance(sessionId, sessionData.subjectId, loc);
+      await markAttendance(sessionId, sessionData.subjectId, loc, currentUser);
     }
   };
 
@@ -262,7 +266,7 @@ export default function StudentScanPage() {
     return new Error(JSON.stringify(errInfo, null, 2));
   };
 
-  const verifyWithLocation = async (code: string, loc: { lat: number; lng: number }) => {
+  const verifyWithLocation = async (code: string, loc: { lat: number; lng: number }, userOverride?: any) => {
     try {
       // 2. Find session by code
       const sessionsRef = collection(db, 'attendance_sessions');
@@ -283,7 +287,7 @@ export default function StudentScanPage() {
       const sessionData = sessionDoc.data();
       setActiveSession({ id: sessionDoc.id, ...sessionData });
 
-      await verifyDistanceAndAuth(sessionDoc.id, sessionData, loc);
+      await verifyDistanceAndAuth(sessionDoc.id, sessionData, loc, userOverride);
     } catch (error: any) {
       if (error.code === 'permission-denied') {
         throw handleFirestoreError(error, 'getDocs', 'attendance_sessions');
@@ -292,17 +296,20 @@ export default function StudentScanPage() {
     }
   };
 
-  const markAttendance = async (sessionId: string, subjectId: string, loc: { lat: number; lng: number }) => {
+  const markAttendance = async (sessionId: string, subjectId: string, loc: { lat: number; lng: number }, userOverride?: any) => {
     try {
-      if (!auth.currentUser) throw new Error("กรุณาล็อกอินก่อนเช็คชื่อ");
-      if (!auth.currentUser.email) throw new Error("ไม่พบข้อมูลอีเมลของคุณ");
+      const user = userOverride || auth.currentUser;
+      if (!user) throw new Error("กรุณาล็อกอินก่อนเช็คชื่อ");
+      if (!user.email) throw new Error("ไม่พบข้อมูลอีเมลของคุณ");
+
+      setVerifyingStatus("กำลังตรวจสอบรายชื่อนักศึกษา...");
 
       // 1. Check if student is enrolled in this subject
       const studentsRef = collection(db, 'students');
       const studentQuery = query(
         studentsRef,
         where('subjectId', '==', subjectId),
-        where('email', '==', auth.currentUser.email)
+        where('email', '==', user.email)
       );
       
       const studentSnap = await getDocs(studentQuery);
@@ -311,16 +318,18 @@ export default function StudentScanPage() {
       }
 
       const studentData = studentSnap.docs[0].data();
-      const recordId = `${auth.currentUser.uid}_${sessionId}`;
+      const recordId = `${user.uid}_${sessionId}`;
       const recordPath = `attendance_records/${recordId}`;
       
+      setVerifyingStatus("กำลังบันทึกข้อมูลการเช็คชื่อ...");
+
       try {
         await setDoc(doc(db, 'attendance_records', recordId), {
           sessionId: sessionId,
           subjectId: subjectId,
-          studentUid: auth.currentUser.uid,
+          studentUid: user.uid,
           studentId: studentData.studentId || '', // Use the ID from the database
-          studentName: studentData.name || auth.currentUser.displayName || 'Student',
+          studentName: studentData.name || user.displayName || 'Student',
           timestamp: Timestamp.now(),
           status: 'present',
           location: loc
@@ -340,6 +349,8 @@ export default function StudentScanPage() {
   };
 
   const handleLoginAndMark = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
     try {
       // Save state before redirect (for mobile)
       if (manualCode && userLocation) {
@@ -351,20 +362,28 @@ export default function StudentScanPage() {
       
       // If user is returned (popup mode), proceed immediately
       if (user && activeSession && userLocation) {
-        await markAttendance(activeSession.id, activeSession.subjectId, userLocation);
+        await markAttendance(activeSession.id, activeSession.subjectId, userLocation, user);
       }
+      setIsLoggingIn(false);
     } catch (e: any) {
       toast.error(e.message || "การล็อกอินล้มเหลว");
+      setIsLoggingIn(false);
     }
   };
 
   // Handle Redirect Result and Restore State
   useEffect(() => {
     const checkRedirect = async () => {
+      if (hasCheckedRedirect.current) return;
+      
       const savedCode = localStorage.getItem('pending_attendance_code');
       const savedLoc = localStorage.getItem('pending_attendance_loc');
 
       if (savedCode && savedLoc) {
+        hasCheckedRedirect.current = true;
+        setStep('verifying');
+        setVerifyingStatus("กำลังกู้คืนสถานะการเช็คชื่อ...");
+        
         try {
           const loc = JSON.parse(savedLoc);
           setManualCode(savedCode);
@@ -372,10 +391,29 @@ export default function StudentScanPage() {
           
           // Check for redirect result
           const user = await handleRedirectResult(['@bumail.net', '@bu.ac.th']);
-          if (user || auth.currentUser) {
-            setStep('verifying');
+          
+          // Wait a bit for auth state to stabilize if handleRedirectResult returned null
+          // but we have saved state (meaning we likely just came back from redirect)
+          let finalUser = user;
+          if (!finalUser) {
+            // Wait up to 2 seconds for auth.currentUser
+            for (let i = 0; i < 10; i++) {
+              if (auth.currentUser) {
+                finalUser = auth.currentUser;
+                break;
+              }
+              await new Promise(r => setTimeout(r, 200));
+            }
+          }
+
+          if (finalUser) {
+            setVerifyingStatus("กำลังดำเนินการเช็คชื่อต่อ...");
             // We need to re-verify the code to get the session data
-            await verifyWithLocation(savedCode, loc);
+            await verifyWithLocation(savedCode, loc, finalUser);
+          } else {
+            // If no user after redirect, go back to enter_code but keep the code
+            setStep('enter_code');
+            toast.error("กรุณาล็อกอินใหม่อีกครั้ง");
           }
         } catch (error: any) {
           console.error("Redirect recovery error:", error);
@@ -487,10 +525,15 @@ export default function StudentScanPage() {
             </div>
             <button 
               onClick={handleLoginAndMark}
-              className="w-full bg-brand-purple text-white py-4 rounded-2xl font-bold text-lg shadow-xl shadow-brand-purple/20 flex items-center justify-center space-x-3"
+              disabled={isLoggingIn}
+              className="w-full bg-brand-purple text-white py-4 rounded-2xl font-bold text-lg shadow-xl shadow-brand-purple/20 flex items-center justify-center space-x-3 disabled:opacity-50"
             >
-              <LogIn size={20} />
-              <span>Login with Google</span>
+              {isLoggingIn ? (
+                <Loader2 size={20} className="animate-spin" />
+              ) : (
+                <LogIn size={20} />
+              )}
+              <span>{isLoggingIn ? 'กำลังเข้าสู่ระบบ...' : 'Login with Google'}</span>
             </button>
           </motion.div>
         )}
