@@ -154,25 +154,48 @@ export default function StudentScanPage() {
     }
   };
 
+  const handleFirestoreError = (error: any, operation: string, path: string) => {
+    console.error(`Firestore Error [${operation}] at ${path}:`, error);
+    const errInfo = {
+      error: error.message || String(error),
+      operation,
+      path,
+      auth: auth.currentUser ? {
+        uid: auth.currentUser.uid,
+        email: auth.currentUser.email
+      } : 'not_authenticated'
+    };
+    return new Error(JSON.stringify(errInfo, null, 2));
+  };
+
   const verifyWithLocation = async (code: string, loc: { lat: number; lng: number }) => {
-    // 2. Find active session
-    const sessionsRef = collection(db, 'attendance_sessions');
-    const q = query(
-      sessionsRef, 
-      where('shortCode', '==', code),
-      where('isActive', '==', true)
-    );
-    
-    const querySnap = await getDocs(q);
-    if (querySnap.empty) {
-      throw new Error("รหัสไม่ถูกต้อง หรือการเช็คชื่อสิ้นสุดลงแล้ว");
+    try {
+      // 2. Find session by code
+      const sessionsRef = collection(db, 'attendance_sessions');
+      const q = query(
+        sessionsRef, 
+        where('shortCode', '==', code)
+      );
+      
+      const querySnap = await getDocs(q);
+      // Filter active sessions in memory to avoid composite index requirement
+      const activeDocs = querySnap.docs.filter(d => d.data().isActive === true);
+      
+      if (activeDocs.length === 0) {
+        throw new Error("รหัสไม่ถูกต้อง หรือการเช็คชื่อสิ้นสุดลงแล้ว");
+      }
+
+      const sessionDoc = activeDocs[0];
+      const sessionData = sessionDoc.data();
+      setActiveSession({ id: sessionDoc.id, ...sessionData });
+
+      await verifyDistanceAndAuth(sessionDoc.id, sessionData, loc);
+    } catch (error: any) {
+      if (error.code === 'permission-denied') {
+        throw handleFirestoreError(error, 'getDocs', 'attendance_sessions');
+      }
+      throw error;
     }
-
-    const sessionDoc = querySnap.docs[0];
-    const sessionData = sessionDoc.data();
-    setActiveSession({ id: sessionDoc.id, ...sessionData });
-
-    await verifyDistanceAndAuth(sessionDoc.id, sessionData, loc);
   };
 
   const markAttendance = async (sessionId: string, subjectId: string, loc: { lat: number; lng: number }) => {
@@ -180,18 +203,26 @@ export default function StudentScanPage() {
       if (!auth.currentUser) throw new Error("กรุณาล็อกอินก่อนเช็คชื่อ");
 
       const recordId = `${auth.currentUser.uid}_${sessionId}`;
-      await setDoc(doc(db, 'attendance_records', recordId), {
-        sessionId: sessionId,
-        subjectId: subjectId,
-        studentUid: auth.currentUser.uid,
-        studentName: auth.currentUser.displayName || 'Student',
-        timestamp: Timestamp.now(),
-        status: 'present',
-        location: loc
-      });
-
-      setStep('success');
-      toast.success("เช็คชื่อสำเร็จ!");
+      const recordPath = `attendance_records/${recordId}`;
+      
+      try {
+        await setDoc(doc(db, 'attendance_records', recordId), {
+          sessionId: sessionId,
+          subjectId: subjectId,
+          studentUid: auth.currentUser.uid,
+          studentName: auth.currentUser.displayName || 'Student',
+          timestamp: Timestamp.now(),
+          status: 'present',
+          location: loc
+        });
+        setStep('success');
+        toast.success("เช็คชื่อสำเร็จ!");
+      } catch (error: any) {
+        if (error.code === 'permission-denied') {
+          throw handleFirestoreError(error, 'setDoc', recordPath);
+        }
+        throw error;
+      }
     } catch (error: any) {
       setIsError(error.message);
       setStep('error');
