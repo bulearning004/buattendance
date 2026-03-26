@@ -42,6 +42,8 @@ import {
   where, 
   deleteDoc, 
   updateDoc, 
+  getDocs,
+  writeBatch,
   handleFirestoreError, 
   OperationType
 } from '../lib/firebase';
@@ -283,11 +285,27 @@ export default function TeacherDashboard() {
       handleFirestoreError(error, OperationType.WRITE, 'students');
     }
   };
-  const removeStudent = async (studentId: string) => {
+  const removeStudent = async (student: Student) => {
     if (!selectedSubject) return;
     
     try {
-      await deleteDoc(doc(db, 'students', studentId + '_' + selectedSubject.id));
+      const studentDocId = student.studentId + '_' + selectedSubject.id;
+      await deleteDoc(doc(db, 'students', studentDocId));
+      
+      // Clear attendance records for this student in this subject
+      // To make testing easier as requested by user
+      const recordsQuery = query(
+        collection(db, 'attendance_records'),
+        where('subjectId', '==', selectedSubject.id),
+        where('studentEmail', '==', student.email)
+      );
+      
+      const recordsSnap = await getDocs(recordsQuery);
+      if (!recordsSnap.empty) {
+        const batch = writeBatch(db);
+        recordsSnap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+      }
       
       // Update student count in subject
       const newCount = Math.max(0, selectedSubject.studentCount - 1);
@@ -611,7 +629,7 @@ export default function TeacherDashboard() {
                                     <MoreHorizontal size={18} />
                                   </button>
                                   <button 
-                                    onClick={() => removeStudent(student.studentId)}
+                                    onClick={() => removeStudent(student)}
                                     className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
                                   >
                                     <Trash2 size={18} />
