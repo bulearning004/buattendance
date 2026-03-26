@@ -8,7 +8,7 @@ export default function LandingPage() {
 
   const handleTeacherLogin = async () => {
     try {
-      await signInWithGoogle();
+      await signInWithGoogle('@bu.ac.th');
       navigate('/teacher/dashboard');
     } catch (error: any) {
       alert(error.message || 'Failed to sign in');

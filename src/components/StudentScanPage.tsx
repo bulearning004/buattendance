@@ -200,7 +200,7 @@ export default function StudentScanPage() {
 
   const handleLoginAndMark = async () => {
     try {
-      await signInWithGoogle();
+      await signInWithGoogle('@bumail.net');
       // After login, we need to check if we have the session and location
       if (activeSession && userLocation) {
         await markAttendance(activeSession.id, activeSession.subjectId, userLocation);
@@ -208,8 +208,8 @@ export default function StudentScanPage() {
         // If lost state, go back to enter code
         setStep('enter_code');
       }
-    } catch (e) {
-      toast.error("การล็อกอินล้มเหลว");
+    } catch (e: any) {
+      toast.error(e.message || "การล็อกอินล้มเหลว");
     }
   };
 

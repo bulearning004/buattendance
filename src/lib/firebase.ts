@@ -8,17 +8,19 @@ export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const googleProvider = new GoogleAuthProvider();
 
-export const signInWithGoogle = async () => {
+export const signInWithGoogle = async (allowedDomain?: string) => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
     
-    // Restrict to @bumail.net (or allow gmail for testing if needed, but keeping user's constraint)
-    // For testing purposes, I'll allow the user's email as well
-    const allowedEmails = ['bulearning004@gmail.com'];
-    if (user.email && !user.email.endsWith('@bumail.net') && !allowedEmails.includes(user.email)) {
-      await signOut(auth);
-      throw new Error('Access restricted to @bumail.net accounts only.');
+    // For testing purposes, we allow the user's email as an exception
+    const testEmail = 'bulearning004@gmail.com';
+    
+    if (user.email !== testEmail) {
+      if (allowedDomain && !user.email?.endsWith(allowedDomain)) {
+        await signOut(auth);
+        throw new Error(`กรุณาใช้บัญชี ${allowedDomain} ในการเข้าสู่ระบบส่วนนี้`);
+      }
     }
     
     return user;
