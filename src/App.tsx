@@ -33,27 +33,27 @@ export default function App() {
   return (
     <Router>
       <div className="min-h-screen bg-background">
-        {!user ? (
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/student/scan" element={<StudentScanPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        ) : (
-          <div className="flex min-h-screen">
-            <Sidebar />
-            <main className="flex-1 flex flex-col">
-              <Routes>
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
-                <Route path="/teacher/reports" element={<TeacherReportsPage />} />
-                <Route path="/attendance/session/:subjectId" element={<AttendanceSessionPage />} />
-                <Route path="/student/scan" element={<StudentScanPage />} />
-                <Route path="*" element={<Navigate to="/dashboard" replace />} />
-              </Routes>
-            </main>
-          </div>
-        )}
+        <Routes>
+          <Route path="/" element={!user ? <LandingPage /> : <Navigate to="/dashboard" replace />} />
+          <Route path="/student/scan" element={<StudentScanPage />} />
+          
+          <Route path="*" element={
+            !user ? <Navigate to="/" replace /> : (
+              <div className="flex min-h-screen">
+                <Sidebar />
+                <main className="flex-1 flex flex-col">
+                  <Routes>
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
+                    <Route path="/teacher/reports" element={<TeacherReportsPage />} />
+                    <Route path="/attendance/session/:subjectId" element={<AttendanceSessionPage />} />
+                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                  </Routes>
+                </main>
+              </div>
+            )
+          } />
+        </Routes>
       </div>
     </Router>
   );

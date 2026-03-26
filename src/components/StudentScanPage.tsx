@@ -11,7 +11,7 @@ import {
   where,
   getDocs
 } from 'firebase/firestore';
-import { db, auth, signInWithGoogle } from '../lib/firebase';
+import { db, auth, signInWithGoogle, handleRedirectResult } from '../lib/firebase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast, Toaster } from 'sonner';
 
@@ -231,18 +231,55 @@ export default function StudentScanPage() {
 
   const handleLoginAndMark = async () => {
     try {
-      await signInWithGoogle('@bumail.net');
-      // After login, we need to check if we have the session and location
-      if (activeSession && userLocation) {
+      // Save state before redirect (for mobile)
+      if (manualCode && userLocation) {
+        localStorage.setItem('pending_attendance_code', manualCode);
+        localStorage.setItem('pending_attendance_loc', JSON.stringify(userLocation));
+      }
+
+      const user = await signInWithGoogle('@bumail.net');
+      
+      // If user is returned (popup mode), proceed immediately
+      if (user && activeSession && userLocation) {
         await markAttendance(activeSession.id, activeSession.subjectId, userLocation);
-      } else {
-        // If lost state, go back to enter code
-        setStep('enter_code');
       }
     } catch (e: any) {
       toast.error(e.message || "การล็อกอินล้มเหลว");
     }
   };
+
+  // Handle Redirect Result and Restore State
+  useEffect(() => {
+    const checkRedirect = async () => {
+      const savedCode = localStorage.getItem('pending_attendance_code');
+      const savedLoc = localStorage.getItem('pending_attendance_loc');
+
+      if (savedCode && savedLoc) {
+        try {
+          const loc = JSON.parse(savedLoc);
+          setManualCode(savedCode);
+          setUserLocation(loc);
+          
+          // Check for redirect result
+          const user = await handleRedirectResult('@bumail.net');
+          if (user || auth.currentUser) {
+            setStep('verifying');
+            // We need to re-verify the code to get the session data
+            await verifyWithLocation(savedCode, loc);
+          }
+        } catch (error: any) {
+          console.error("Redirect recovery error:", error);
+          setIsError(error.message);
+          setStep('error');
+        } finally {
+          localStorage.removeItem('pending_attendance_code');
+          localStorage.removeItem('pending_attendance_loc');
+        }
+      }
+    };
+
+    checkRedirect();
+  }, []);
 
   if (step === 'success') {
     return (

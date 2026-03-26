@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, where, onSnapshot, deleteDoc, updateDoc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -8,8 +8,21 @@ export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const googleProvider = new GoogleAuthProvider();
 
+// Force account selection
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
+});
+
 export const signInWithGoogle = async (allowedDomain?: string) => {
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  
   try {
+    if (isMobile) {
+      // Use redirect for mobile to avoid popup blockers
+      await signInWithRedirect(auth, googleProvider);
+      return null; // Will redirect away
+    }
+
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
     
@@ -26,6 +39,27 @@ export const signInWithGoogle = async (allowedDomain?: string) => {
     return user;
   } catch (error) {
     console.error('Auth Error:', error);
+    throw error;
+  }
+};
+
+export const handleRedirectResult = async (allowedDomain?: string) => {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result) {
+      const user = result.user;
+      const testEmail = 'bulearning004@gmail.com';
+      if (user.email !== testEmail) {
+        if (allowedDomain && !user.email?.endsWith(allowedDomain)) {
+          await signOut(auth);
+          throw new Error(`กรุณาใช้บัญชี ${allowedDomain} ในการเข้าสู่ระบบส่วนนี้`);
+        }
+      }
+      return user;
+    }
+    return null;
+  } catch (error) {
+    console.error('Redirect Auth Error:', error);
     throw error;
   }
 };
