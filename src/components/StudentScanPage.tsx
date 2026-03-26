@@ -35,7 +35,9 @@ export default function StudentScanPage() {
   const [step, setStep] = useState<'enter_code' | 'verifying' | 'login_required' | 'success' | 'error'>('enter_code');
   const [manualCode, setManualCode] = useState('');
   const [isError, setIsError] = useState<string | null>(null);
+  const [verifyingStatus, setVerifyingStatus] = useState<string>('');
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
   const [lastLocationUpdate, setLastLocationUpdate] = useState<number>(0);
   const [activeSession, setActiveSession] = useState<any>(null);
   const navigate = useNavigate();
@@ -51,22 +53,72 @@ export default function StudentScanPage() {
           lat: position.coords.latitude,
           lng: position.coords.longitude
         });
+        setLocationAccuracy(position.coords.accuracy);
         setLastLocationUpdate(Date.now());
       },
       (error) => {
         console.error("WatchPosition error:", error);
+        // Don't clear location, just log error. 
+        // If it was found once, we might still want to use it if it's not too old.
       },
       { 
         enableHighAccuracy: true, 
-        timeout: 10000, 
-        maximumAge: 0 
+        timeout: 15000, 
+        maximumAge: 5000 
       }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
-  // Helper to get location with high accuracy
+  const requestFreshLocation = (resolve: any, reject: any) => {
+    setVerifyingStatus("กำลังค้นหาสัญญาณ GPS (ความแม่นยำสูง)...");
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000, // 10 seconds for high accuracy
+      maximumAge: 0 // Force fresh
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocationAccuracy(position.coords.accuracy);
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        });
+      },
+      (error) => {
+        console.warn("High accuracy failed, trying standard accuracy...", error);
+        setVerifyingStatus("กำลังค้นหาสัญญาณ GPS (โหมดประหยัดพลังงาน)...");
+        
+        // Fallback to standard accuracy if high accuracy fails or times out
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setLocationAccuracy(pos.coords.accuracy);
+            resolve({
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude
+            });
+          },
+          (err) => {
+            let msg = "ไม่สามารถเข้าถึงตำแหน่ง GPS ได้";
+            if (err.code === err.PERMISSION_DENIED) {
+              msg = "กรุณาอนุญาตให้เข้าถึงตำแหน่ง (Location Access) เพื่อเช็คชื่อ";
+            } else if (err.code === err.POSITION_UNAVAILABLE) {
+              msg = "ไม่สามารถระบุตำแหน่งได้ในขณะนี้ (สัญญาณ GPS อ่อนหรือปิดอยู่) กรุณาลองใหม่อีกครั้ง";
+            } else if (err.code === err.TIMEOUT) {
+              msg = "การระบุตำแหน่งใช้เวลานานเกินไป กรุณาตรวจสอบสัญญาณ GPS หรือลองใหม่อีกครั้ง";
+            }
+            reject(new Error(msg));
+          },
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+        );
+      },
+      options
+    );
+  };
+
+  // Helper to get location with high accuracy and fallback
   const getPreciseLocation = (): Promise<{ lat: number; lng: number }> => {
     return new Promise((resolve, reject) => {
       if (!("geolocation" in navigator)) {
@@ -74,29 +126,28 @@ export default function StudentScanPage() {
         return;
       }
 
+      // Try to get cached position first (very fast)
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          resolve({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-        },
-        (error) => {
-          let msg = "ไม่สามารถเข้าถึงตำแหน่ง GPS ได้";
-          if (error.code === error.PERMISSION_DENIED) {
-            msg = "กรุณาอนุญาตให้เข้าถึงตำแหน่ง (Location Access) เพื่อเช็คชื่อ";
-          } else if (error.code === error.POSITION_UNAVAILABLE) {
-            msg = "ไม่สามารถระบุตำแหน่งได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง";
-          } else if (error.code === error.TIMEOUT) {
-            msg = "การระบุตำแหน่งใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้ง";
+        (pos) => {
+          // If cached position is fresh enough (less than 1 min), use it immediately
+          const age = Date.now() - pos.timestamp;
+          if (age < 60000) {
+            console.log("Using fresh cached position", age);
+            resolve({
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude
+            });
+            return;
           }
-          reject(new Error(msg));
+          
+          // Otherwise proceed to get fresh high accuracy position
+          requestFreshLocation(resolve, reject);
         },
-        { 
-          enableHighAccuracy: true, 
-          timeout: 10000, 
-          maximumAge: 0 
-        }
+        () => {
+          // If getting cached fails, just try fresh one
+          requestFreshLocation(resolve, reject);
+        },
+        { enableHighAccuracy: false, timeout: 2000, maximumAge: Infinity }
       );
     });
   };
@@ -120,10 +171,11 @@ export default function StudentScanPage() {
 
   const handleVerifyBySessionId = async (sessionId: string) => {
     setStep('verifying');
+    setVerifyingStatus("กำลังตรวจสอบข้อมูลการเช็คชื่อ...");
     try {
-      // Use tracked location if fresh (within 5s), otherwise get fresh one
+      // Use tracked location if fresh (within 60s), otherwise get fresh one
       let loc = userLocation;
-      const isFresh = Date.now() - lastLocationUpdate < 5000;
+      const isFresh = Date.now() - lastLocationUpdate < 60000;
       
       if (!loc || !isFresh) {
         loc = await getPreciseLocation();
@@ -131,6 +183,7 @@ export default function StudentScanPage() {
         setLastLocationUpdate(Date.now());
       }
 
+      setVerifyingStatus("กำลังตรวจสอบพิกัดห้องเรียน...");
       const sessionDoc = await getDoc(doc(db, 'attendance_sessions', sessionId));
       if (!sessionDoc.exists()) throw new Error("ไม่พบข้อมูลการเช็คชื่อนี้ (Session not found)");
       
@@ -173,11 +226,12 @@ export default function StudentScanPage() {
 
     setStep('verifying');
     setIsError(null);
+    setVerifyingStatus("กำลังเตรียมการตรวจสอบ...");
 
     try {
-      // Use tracked location if fresh (within 5s), otherwise get fresh one
+      // Use tracked location if fresh (within 60s), otherwise get fresh one
       let loc = userLocation;
-      const isFresh = Date.now() - lastLocationUpdate < 5000;
+      const isFresh = Date.now() - lastLocationUpdate < 60000;
       
       if (!loc || !isFresh) {
         loc = await getPreciseLocation();
@@ -185,6 +239,7 @@ export default function StudentScanPage() {
         setLastLocationUpdate(Date.now());
       }
       
+      setVerifyingStatus("กำลังตรวจสอบรหัสและพิกัด...");
       await verifyWithLocation(manualCode, loc);
     } catch (error: any) {
       console.error("Verification error:", error);
@@ -379,8 +434,8 @@ export default function StudentScanPage() {
                 disabled={manualCode.length !== 6}
                 className="w-full bg-brand-purple text-white py-5 rounded-[1.5rem] font-bold text-xl shadow-2xl shadow-brand-purple/30 disabled:opacity-50 disabled:grayscale transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-3"
               >
-                <MapPin size={24} />
-                <span>ตรวจสอบพิกัดและเช็คชื่อ</span>
+                {userLocation ? <MapPin size={24} /> : <Loader2 size={24} className="animate-spin" />}
+                <span>{userLocation ? 'ตรวจสอบพิกัดและเช็คชื่อ' : 'กำลังค้นหา GPS...'}</span>
               </button>
             </form>
 
@@ -400,7 +455,7 @@ export default function StudentScanPage() {
             <Loader2 size={64} className="animate-spin text-brand-purple mx-auto" />
             <div className="space-y-2">
               <h2 className="text-2xl font-bold">กำลังตรวจสอบ...</h2>
-              <p className="text-slate-400">กรุณารอสักครู่ ระบบกำลังยืนยันพิกัด GPS ของคุณ</p>
+              <p className="text-slate-400">{verifyingStatus || 'กรุณารอสักครู่ ระบบกำลังยืนยันพิกัด GPS ของคุณ'}</p>
             </div>
           </div>
         )}
@@ -462,11 +517,13 @@ export default function StudentScanPage() {
       {/* GPS Status Indicator */}
       <div className="absolute bottom-8 left-0 right-0 flex justify-center">
         <div className="bg-black/40 backdrop-blur-xl border border-white/10 p-4 rounded-3xl flex items-center space-x-4 text-white">
-          <div className={`w-3 h-3 rounded-full ${userLocation ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+          <div className={`w-3 h-3 rounded-full ${userLocation ? (locationAccuracy && locationAccuracy < 30 ? 'bg-emerald-500' : 'bg-amber-500') : 'bg-red-500'} animate-pulse`} />
           <div className="flex flex-col">
             <span className="text-[10px] font-bold uppercase tracking-widest opacity-60">GPS Status</span>
             <span className="text-xs font-medium">
-              {userLocation ? 'พบตำแหน่งของคุณแล้ว' : 'กำลังค้นหาสัญญาณ GPS...'}
+              {userLocation 
+                ? `พบตำแหน่งแล้ว (${locationAccuracy ? `แม่นยำ ${Math.round(locationAccuracy)}ม.` : 'กำลังคำนวณความแม่นยำ'})` 
+                : 'กำลังค้นหาสัญญาณ GPS...'}
             </span>
           </div>
         </div>
