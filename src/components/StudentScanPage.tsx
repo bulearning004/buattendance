@@ -295,7 +295,22 @@ export default function StudentScanPage() {
   const markAttendance = async (sessionId: string, subjectId: string, loc: { lat: number; lng: number }) => {
     try {
       if (!auth.currentUser) throw new Error("กรุณาล็อกอินก่อนเช็คชื่อ");
+      if (!auth.currentUser.email) throw new Error("ไม่พบข้อมูลอีเมลของคุณ");
 
+      // 1. Check if student is enrolled in this subject
+      const studentsRef = collection(db, 'students');
+      const studentQuery = query(
+        studentsRef,
+        where('subjectId', '==', subjectId),
+        where('email', '==', auth.currentUser.email)
+      );
+      
+      const studentSnap = await getDocs(studentQuery);
+      if (studentSnap.empty) {
+        throw new Error("คุณไม่มีรายชื่อในวิชานี้ กรุณาติดต่ออาจารย์ผู้สอน");
+      }
+
+      const studentData = studentSnap.docs[0].data();
       const recordId = `${auth.currentUser.uid}_${sessionId}`;
       const recordPath = `attendance_records/${recordId}`;
       
@@ -304,7 +319,8 @@ export default function StudentScanPage() {
           sessionId: sessionId,
           subjectId: subjectId,
           studentUid: auth.currentUser.uid,
-          studentName: auth.currentUser.displayName || 'Student',
+          studentId: studentData.studentId || '', // Use the ID from the database
+          studentName: studentData.name || auth.currentUser.displayName || 'Student',
           timestamp: Timestamp.now(),
           status: 'present',
           location: loc

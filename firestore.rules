@@ -43,11 +43,12 @@ service cloud.firestore {
     }
 
     function isValidRecord(data) {
-      return data.keys().hasAll(['sessionId', 'subjectId', 'studentUid', 'studentName', 'timestamp', 'status', 'location']) &&
+      return data.keys().hasAll(['sessionId', 'subjectId', 'studentUid', 'studentId', 'studentName', 'timestamp', 'status', 'location']) &&
              data.sessionId is string &&
              data.subjectId is string &&
              data.studentUid is string &&
              data.studentUid == request.auth.uid &&
+             data.studentId is string &&
              data.studentName is string &&
              data.timestamp is timestamp &&
              data.status == 'present' &&
