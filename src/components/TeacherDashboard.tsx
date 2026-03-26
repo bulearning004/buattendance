@@ -74,19 +74,37 @@ export default function TeacherDashboard() {
       handleFirestoreError(error, OperationType.LIST, 'subjects');
     });
 
-    const studentsQuery = collection(db, 'students');
-    const unsubscribeStudents = onSnapshot(studentsQuery, (snapshot) => {
-      const studentsData = snapshot.docs.map(doc => doc.data() as Student);
-      setStudents(studentsData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'students');
-    });
+    let unsubscribeStudents = () => {};
+    
+    if (selectedSubject) {
+      const studentsQuery = query(
+        collection(db, 'students'),
+        where('subjectId', '==', selectedSubject.id)
+      );
+      unsubscribeStudents = onSnapshot(studentsQuery, (snapshot) => {
+        const studentsData = snapshot.docs.map(doc => doc.data() as Student);
+        setStudents(studentsData);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'students');
+      });
+    } else {
+      // If no subject selected, maybe we want all students for all teacher's subjects?
+      // For now, let's just clear students or get all if needed.
+      // The previous code got all students.
+      const studentsQuery = collection(db, 'students');
+      unsubscribeStudents = onSnapshot(studentsQuery, (snapshot) => {
+        const studentsData = snapshot.docs.map(doc => doc.data() as Student);
+        setStudents(studentsData);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'students');
+      });
+    }
 
     return () => {
       unsubscribeSubjects();
       unsubscribeStudents();
     };
-  }, []);
+  }, [selectedSubject?.id]);
 
   const [newSubject, setNewSubject] = useState({
     code: '',

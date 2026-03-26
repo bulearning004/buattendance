@@ -71,24 +71,26 @@ export default function ExcelUpload({ onUploadSuccess }: ExcelUploadProps) {
           emailColIndex = 2;
         }
 
-        const normalizedStudents: Student[] = [];
+        const normalizedStudents: any[] = [];
         for (let i = headerRowIndex + 1; i < rows.length; i++) {
           const row = rows[i];
           if (!row || row.length === 0) continue;
 
           const studentId = String(row[idColIndex] || '').trim().replace(/-/g, '');
           let name = String(row[nameColIndex] || '').trim();
-          const email = emailColIndex !== -1 ? String(row[emailColIndex] || '').trim() : '';
+          const email = emailColIndex !== -1 ? String(row[emailColIndex] || '').trim() : `${studentId}@bumail.net`;
 
           // If name is still empty and we have a column next to it, maybe it's first/last name
           if (!name && row[nameColIndex + 1]) {
             name = `${String(row[nameColIndex] || '').trim()} ${String(row[nameColIndex + 1] || '').trim()}`.trim();
           }
 
-          if (studentId && name && studentId.length > 3) {
+          if (studentId && name && studentId.length >= 3) {
             normalizedStudents.push({ studentId, name, email });
           }
         }
+
+        console.log('Normalized students:', normalizedStudents);
 
         if (normalizedStudents.length === 0) {
           const firstRow = rows.length > 0 ? rows[0].join(', ') : 'None';

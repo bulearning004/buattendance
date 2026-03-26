@@ -58,6 +58,12 @@ service cloud.firestore {
     // Rules
     // ===============================================================
 
+    match /students/{studentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated();
+    }
+
     match /subjects/{subjectId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
