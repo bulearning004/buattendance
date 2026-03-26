@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { UserCheck, LogIn, Key } from 'lucide-react';
-import { signInWithGoogle, handleRedirectResult } from '../lib/firebase';
+import { signInWithGoogle, handleRedirectResult, waitForAuth } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
 
 export default function LandingPage() {
@@ -11,11 +11,16 @@ export default function LandingPage() {
     const checkRedirect = async () => {
       try {
         const user = await handleRedirectResult('@bu.ac.th');
-        if (user) {
+        let finalUser = user;
+        if (!finalUser) {
+          finalUser = await waitForAuth();
+        }
+        
+        if (finalUser && finalUser.email?.endsWith('@bu.ac.th')) {
           navigate('/teacher/dashboard');
         }
       } catch (error: any) {
-        alert(error.message || 'Failed to sign in');
+        console.error('Landing redirect error:', error);
       }
     };
     checkRedirect();

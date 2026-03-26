@@ -11,7 +11,7 @@ import {
   where,
   getDocs
 } from 'firebase/firestore';
-import { db, auth, signInWithGoogle, handleRedirectResult } from '../lib/firebase';
+import { db, auth, signInWithGoogle, handleRedirectResult, waitForAuth } from '../lib/firebase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast, Toaster } from 'sonner';
 
@@ -350,6 +350,13 @@ export default function StudentScanPage() {
 
   const handleLoginAndMark = async () => {
     if (isLoggingIn) return;
+    
+    // Check if user is already logged in (might have happened just now)
+    if (auth.currentUser && activeSession && userLocation) {
+      await markAttendance(activeSession.id, activeSession.subjectId, userLocation, auth.currentUser);
+      return;
+    }
+
     setIsLoggingIn(true);
     try {
       // Save state before redirect (for mobile)
@@ -392,18 +399,11 @@ export default function StudentScanPage() {
           // Check for redirect result
           const user = await handleRedirectResult(['@bumail.net', '@bu.ac.th']);
           
-          // Wait a bit for auth state to stabilize if handleRedirectResult returned null
-          // but we have saved state (meaning we likely just came back from redirect)
+          // Wait for auth to be ready if no redirect result
           let finalUser = user;
           if (!finalUser) {
-            // Wait up to 2 seconds for auth.currentUser
-            for (let i = 0; i < 10; i++) {
-              if (auth.currentUser) {
-                finalUser = auth.currentUser;
-                break;
-              }
-              await new Promise(r => setTimeout(r, 200));
-            }
+            setVerifyingStatus("กำลังตรวจสอบสถานะการเข้าสู่ระบบ...");
+            finalUser = await waitForAuth();
           }
 
           if (finalUser) {
@@ -411,8 +411,8 @@ export default function StudentScanPage() {
             // We need to re-verify the code to get the session data
             await verifyWithLocation(savedCode, loc, finalUser);
           } else {
-            // If no user after redirect, go back to enter_code but keep the code
-            setStep('enter_code');
+            // If no user after redirect, stay on login_required but show error
+            setStep('login_required');
             toast.error("กรุณาล็อกอินใหม่อีกครั้ง");
           }
         } catch (error: any) {
